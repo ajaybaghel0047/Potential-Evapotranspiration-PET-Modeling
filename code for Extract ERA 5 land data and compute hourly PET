@@ -1,0 +1,247 @@
+# # Step 1: Install necessary libraries
+# !pip install cdsapi xarray==2023.6.0
+
+# # Step 2: Import required libraries
+# import os
+# import cdsapi
+
+# # Set up the CDS API environment
+# os.environ["CDSAPI_URL"] = "https://cds.climate.copernicus.eu/api/v2"
+# os.environ["CDSAPI_KEY"] = "328842:5e8c9757-304c-4406-b12c-0e10d747"         ###  you can use your API key 
+
+# # Define the range of years from 1990 to 2023
+# years = range(1990, 2024)
+
+# # Define the bounding box: North, West, South, East
+# BOUNDING_BOX = [27, 74, 21, 83]  # [North, West, South, East]
+
+# # Initialize CDS API client
+# c = cdsapi.Client()
+
+
+# # Initialize CDS API client
+# c = cdsapi.Client()
+
+# # Define the local path where you want to save files
+# SAVE_PATH = '/home/shruti/AJAY/Project data'  # Update this path
+
+
+# def download_era5_data(start_year, end_year):
+#     for year in range(start_year, end_year + 1):
+#         year_str = str(year)
+#         filename = os.path.join(SAVE_PATH, f"era5_{year_str}.nc")  # Save to specified directory
+       
+#         try:
+#             # Download the data
+#             c.retrieve(
+#                 'reanalysis-era5-single-levels',
+#                 {
+#                     'product_type': 'reanalysis',
+#                     'format': 'netcdf',
+#                     'variable': [
+#                         '2m_temperature',  # 2 m dew point temperature [K]
+#                         '2m_dewpoint_temperature', #  2 m air temperature [K]
+#                         '10m_u_component_of_wind',  # 10 m u-component (zonal) of wind speed [m s −1 ]
+#                         '10m_v_component_of_wind',  # 10 m v-component (meridional) of wind speed [m s −1 ]
+#                         'mean_sea_level_pressure',  # Hourly atmospheric pressure
+#                         'surface_pressure',  # atmospheric surface pressure [Pa]
+#                         'surface_net_thermal_radiation', #surface net thermal radiation [J m −2 ]
+#                         'surface_net_solar_radiation ',  #surface net solar radiation [J m −2 ]
+#                     ],
+#                     'year': year_str,
+#                     'month': [f"{i:02d}" for i in range(1, 13)],
+#                     'day': [f"{i:02d}" for i in range(1, 32)],
+#                     'time': [
+#                         '00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00',
+#                         '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00',
+#                         '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00',
+#                         '21:00', '22:00', '23:00'
+#                     ],
+#                     'area': BOUNDING_BOX  # Specify the bounding box
+#                 },
+#                 filename
+#             )
+#             print(f"Downloaded data for {year_str} into {filename}")
+#         except Exception as e:
+#             print(f"Failed to download data for {year_str}: {e}")
+
+# # Call the function for the range of years
+# download_era5_data(2003, 2023)
+
+##########################################     Merging  cdf files                ##############################################################
+
+# import xarray as xr
+# import os
+
+# # Define the folder where the year-wise merged files are stored
+# input_folder = "/home/shruti/AJAY/Project data/merged_data/"
+
+# # Create a list to hold all the datasets
+# datasets = []
+
+# # Loop through all the year files in the folder
+# for year in range(1990, 2024):
+#     file_path = os.path.join(input_folder, f"era5_{year}.nc")
+   
+#     if os.path.exists(file_path):
+#         # Open the dataset and append it to the list
+#         ds = xr.open_dataset(file_path)
+#         datasets.append(ds)
+#     else:
+#         print(f"File for year {year} not found. Skipping...")
+
+# # Concatenate all datasets along the 'time' dimension
+# if datasets:
+#     merged_dataset = xr.concat(datasets, dim='time')
+
+#     # Save the final merged dataset to a new NetCDF file
+#     output_path = "/home/shruti/AJAY/Project data/era5_1990_2023_merged.nc"
+#     merged_dataset.to_netcdf(output_path)
+
+#     print(f"Final merged dataset saved to {output_path}")
+# else:
+#     print("No datasets found to merge.")
+
+
+######################################           hourly PET with unit                           ############################################
+
+
+
+# import xarray as xr
+# import numpy as np
+
+# # Load the merged dataset (1990-2023)
+# path = "/home/shruti/AJAY/Project data/era5_1990_2023_merged.nc"
+# ds = xr.open_dataset(path)
+
+# # Constants
+# lambda_v = 2.45  # Latent heat of vaporization (MJ kg^-1)
+# cp = 1.013 * 10**-3  # Specific heat of air at constant pressure (MJ kg^-1 °C^-1)
+# epsilon = 0.622  # Ratio of molecular weight of water vapor to dry air
+# pressure = ds['sp']  # Surface pressure (Pa)
+# pressure = pressure / 1000  # Convert to kPa
+
+# # Convert temperature from K to °C
+# ds['t2m_celsius'] = ds['t2m'] - 273.15
+# ds['d2m_celsius'] = ds['d2m'] - 273.15
+
+# # Calculate saturation vapor pressure (e_s) using Tetens equation
+# ds['es'] = 0.6108 * np.exp((17.27 * ds['t2m_celsius']) / (ds['t2m_celsius'] + 237.3))
+
+# # Calculate actual vapor pressure (e_a) using dew point temperature
+# ds['ea'] = 0.6108 * np.exp((17.27 * ds['d2m_celsius']) / (ds['d2m_celsius'] + 237.3))
+
+# # Calculate the slope of the saturation vapor pressure curve (Δ)
+# ds['delta'] = (4098 * ds['es']) / ((ds['t2m_celsius'] + 237.3) ** 2)
+
+# # Calculate the psychrometric constant (γ)
+# ds['gamma'] = (cp * pressure) / (epsilon * lambda_v)
+
+# # Calculate wind speed at 2 meters (u_2) from 10-meter wind speed (u10 and v10)
+# ds['u2'] = np.sqrt(ds['u10']**2 + ds['v10']**2) * (4.87 / np.log(67.8 * 10 - 5.42))
+
+# # Calculate net radiation (R_n) using surface solar and thermal radiation
+# ds['Rn'] = (ds['ssr'] + ds['str']) / 1e6  # Convert from J m^-2 to MJ m^-2
+
+# # Define day and night based on solar radiation
+# ds['daytime'] = xr.where(ds['ssr'] > 0, 1, 0)
+
+# # Convert 'daytime' from int to float
+# ds['daytime'] = ds['daytime'].astype(float)
+
+# # Calculate soil heat flux (G) only during the day (10% of R_n during the day, 0 at night)
+# ds['G'] = xr.where(ds['daytime'] == 1, 0.1 * ds['Rn'], 0.0)  # Set night heat flux to 0
+
+# # Calculating hPET
+# ds['hPET'] = ((0.408 * ds['delta'] * (ds['Rn'] - ds['G'])) + (ds['gamma'] * (37 / (ds['t2m_celsius'] + 273) * ds['u2'] * (ds['es'] - ds['ea'])))) / (ds['delta'] + ds['gamma'] * (1 + 0.34 * ds['u2']**2))
+
+
+# # Assign units to the variables
+# ds['Rn'].attrs['units'] = 'MJ m-2'  # Net radiation in MJ/m²
+# ds['t2m'].attrs['units'] = 'K'  # Temperature in Kelvin
+# ds['d2m'].attrs['units'] = 'K'  # Dew point temperature in Kelvin
+# ds['u2'].attrs['units'] = 'm s-1'  # Wind speed in meters per second
+# ds['es'].attrs['units'] = 'kPa'  # Saturation vapor pressure in kPa
+# ds['ea'].attrs['units'] = 'kPa'  # Actual vapor pressure in kPa
+# ds['delta'].attrs['units'] = 'kPa °C-1'  # Slope of vapor pressure curve
+# ds['gamma'].attrs['units'] = 'kPa °C-1'  # Psychrometric constant
+# ds['G'].attrs['units'] = 'MJ m-2'  # Soil heat flux in MJ/m²
+# ds['hPET'].attrs['units'] = 'mm hr-1'  # Potential evapotranspiration is typically expressed in mm/hr
+
+# # Save the updated dataset with the correct units
+# output_path = "/home/shruti/AJAY/Project data/era5_1990_2023_with_hPET_units.nc"
+# ds.to_netcdf(output_path)
+
+# print(f"Updated dataset with units saved to {output_path}")
+
+
+
+############################  convert hourly to daily PEt data #######################
+
+# import xarray as xr
+
+# # Load the merged dataset (1990-2023) with hourly PET (hPET)
+# path = "/home/shruti/AJAY/Project data/era5_1990_2023_with_hPET_units.nc"
+# ds = xr.open_dataset(path)
+
+# # print(ds)
+
+
+# # Convert hourly PET data (hPET) into daily PET by summing over each day
+# # The 'time' dimension is already in datetime format, so we can resample based on '1D' for daily aggregation
+# dPET = ds['hPET'].resample(time='1D').sum(dim='time')
+
+# # Create a new dataset that contains only dPET along with latitude, longitude, and time
+# dPET_ds = xr.Dataset(
+#     data_vars={'dPET': dPET},  # Add the daily PET data
+#     coords={
+#         'longitude': ds['longitude'],
+#         'latitude': ds['latitude'],
+#         'time': dPET['time']  # Use the resampled daily time dimension
+#     }
+# )
+
+# # Save the new dataset with daily PET data only
+# output_netcdf_file = '/home/shruti/AJAY/Project data/era5_1990_2023_only_dPET.nc'
+# dPET_ds.to_netcdf(output_netcdf_file)
+
+# print("New NetCDF file with only daily PET data (dPET) has been saved.")
+
+# # Optionally, load and verify the new dataset
+# ds_with_only_dPET = xr.open_dataset(output_netcdf_file)
+# print(ds_with_only_dPET)
+
+# ######################################   clipping of cdf file #####################################
+
+
+# import xarray as xr
+# import geopandas as gpd
+# import rioxarray
+
+# # Load the NetCDF dataset
+# netcdf_file = '/home/shruti/AJAY/Project data/era5_1990_2023_only_dPET.nc'
+# ds = xr.open_dataset(netcdf_file)
+
+# # Load the shapefile using geopandas
+# shapefile_path = '/home/shruti/AJAY/mp/MPDIST/MPDIST.shp'
+# shape_gdf = gpd.read_file(shapefile_path)
+
+# # Ensure the dataset has geospatial coordinates (latitude, longitude)
+# # Convert to DataArray and assign spatial dimensions for rioxarray
+# ds = ds.rio.write_crs("EPSG:4326", inplace=True)
+
+# # Clip the dataset using the shapefile
+# clipped_ds = ds.rio.clip(shape_gdf.geometry, shape_gdf.crs, drop=True)
+
+# # This will ensure that only the data within the shapefile region remains
+# # Save the clipped dataset to a new NetCDF file
+# output_netcdf_file = '/home/shruti/AJAY/Project data/dPET_clipped_file.nc'
+# clipped_ds.to_netcdf(output_netcdf_file)
+
+# print("Clipped NetCDF file has been saved.")
+
+# # Optionally, load the new clipped file to confirm the data is correctly clipped
+# clipped_ds_loaded = xr.open_dataset(output_netcdf_file)
+
+# # Print the dataset to see the variables and their details
+# print(clipped_ds_loaded)
